@@ -91,13 +91,36 @@ export async function notifyDebitLedger(entry, action, notifyStates) {
 		return
 	}
 
-	const custom = {
-		handle: entry.handle,
-		status: notifyAction.state,
-		coreId: notifyAction.coreId,
-		reason: notifyAction.error?.reason,
-		detail: notifyAction.error?.detail,
-		failId: notifyAction.error?.failId,
+	// Build custom object based on status
+	// For "failed" status, include moment + error details (ledger expects these)
+	// For success statuses, include moment and coreId
+	let custom
+	if (notifyAction.state === 'failed') {
+		custom = {
+			handle: entry.handle,
+			status: notifyAction.state,
+			moment: new Date().toISOString(),
+		}
+		// Add error fields if present
+		if (notifyAction.error?.reason) {
+			custom.reason = notifyAction.error.reason
+		}
+		if (notifyAction.error?.detail) {
+			custom.detail = notifyAction.error.detail
+		}
+		if (notifyAction.error?.failId) {
+			custom.failId = notifyAction.error.failId
+		}
+	} else {
+		// For success statuses (prepared, committed, aborted), include moment
+		custom = {
+			handle: entry.handle,
+			status: notifyAction.state,
+			moment: new Date().toISOString(),
+		}
+		if (notifyAction.coreId) {
+			custom.coreId = notifyAction.coreId
+		}
 	}
 
 	// Log before sending
@@ -172,13 +195,36 @@ export async function notifyCreditLedger(entry, action, notifyStates) {
 		return
 	}
 
-	const custom = {
-		handle: entry.handle,
-		status: notifyAction.state,
-		coreId: notifyAction.coreId,
-		reason: notifyAction.error?.reason,
-		detail: notifyAction.error?.detail,
-		failId: notifyAction.error?.failId,
+	// Build custom object based on status
+	// For "failed" status, include moment + error details (ledger expects these)
+	// For success statuses, include moment and coreId
+	let custom
+	if (notifyAction.state === 'failed') {
+		custom = {
+			handle: entry.handle,
+			status: notifyAction.state,
+			moment: new Date().toISOString(),
+		}
+		// Add error fields if present
+		if (notifyAction.error?.reason) {
+			custom.reason = notifyAction.error.reason
+		}
+		if (notifyAction.error?.detail) {
+			custom.detail = notifyAction.error.detail
+		}
+		if (notifyAction.error?.failId) {
+			custom.failId = notifyAction.error.failId
+		}
+	} else {
+		// For success statuses (prepared, committed, aborted), include moment
+		custom = {
+			handle: entry.handle,
+			status: notifyAction.state,
+			moment: new Date().toISOString(),
+		}
+		if (notifyAction.coreId) {
+			custom.coreId = notifyAction.coreId
+		}
 	}
 
 	// Log before sending

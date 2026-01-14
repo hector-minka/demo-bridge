@@ -8,6 +8,8 @@
 		"start:debit": "nodemon src/debit-server.js 3000",
 		"start:credit": "nodemon src/credit-server.js 3001",
 		"start:both": "concurrently \"npm run start:debit\" \"npm run start:credit\"",
+		"start:debit:interactive": "FORCE_INTERACTIVE=true nodemon src/debit-server.js 3000",
+		"start:credit:interactive": "FORCE_INTERACTIVE=true nodemon src/credit-server.js 3001",
 		"test": "echo \"Error: no test specified\" && exit 1"
 	},
 	"author": "",

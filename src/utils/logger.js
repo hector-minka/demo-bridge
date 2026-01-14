@@ -232,4 +232,17 @@ export const logger = {
   timestamp() {
     return `${colors.dim}[${formatTime()}]${colors.reset}`;
   },
+
+  // Interactive prompt
+  prompt(message, type = 'info') {
+    const typeColors = {
+      question: colors.yellow,
+      warning: colors.yellow,
+      info: colors.blue,
+      success: colors.green,
+      error: colors.red,
+    };
+    const color = typeColors[type] || colors.cyan;
+    console.log(`\n${color}${colors.bright}❓ ${message}${colors.reset}`);
+  },
 };

@@ -1,10 +1,24 @@
 import { notifyDebitLedger } from "../ledger.js";
 import { getEntry, createEntry, updateEntry } from "../persistence.js";
 import { logger } from "../utils/logger.js";
+import { waitForConfirmation, waitForInput } from "../utils/terminal-input.js";
 
 // Simple handler that just accepts and responds
-async function processAction(entry, action) {
+async function processAction(entry, action, accepted = true) {
   const actionData = entry.actions[action] || {};
+  
+  if (!accepted) {
+    actionData.state = "failed";
+    actionData.error = {
+      reason: "bridge.entry-rejected",
+      detail: "Operation rejected by user",
+      failId: undefined,
+    };
+    entry.actions[action] = actionData;
+    entry.state = "failed";
+    await updateEntry(entry);
+    return entry;
+  }
   
   // Always succeed - no validation
   actionData.state = action === "prepare" ? "prepared" : 
@@ -22,6 +36,8 @@ export async function prepareDebit(req, res) {
   const handle = req.body?.data?.handle;
   const amount = req.body?.data?.amount;
   const symbol = req.body?.data?.symbol?.handle;
+  const source = req.body?.data?.source?.handle;
+  const target = req.body?.data?.target?.handle;
 
   // Accept immediately
   res.sendStatus(202);
@@ -51,8 +67,32 @@ export async function prepareDebit(req, res) {
   await updateEntry(entry);
   logger.stateTransition(null, "processing", handle);
 
-  // Always succeed
-  entry = await processAction(entry, "prepare");
+  // Ask user for confirmation
+  const promptMessage = `DEBIT PREPARE - Accept or Reject?\n` +
+    `  Handle: ${handle}\n` +
+    `  Amount: ${amount} ${symbol}\n` +
+    `  Source: ${source}\n` +
+    `  Target: ${target}\n` +
+    `\nAccept this debit prepare? (y/n): `;
+  
+  logger.prompt(promptMessage, "question");
+  
+  // Default to true (accept) in non-interactive environments
+  const accepted = await waitForConfirmation(promptMessage, true);
+  
+  if (!accepted) {
+    logger.warn("Debit prepare rejected by user", { handle });
+    entry = await processAction(entry, "prepare", false);
+    logger.stateTransition("processing", "failed", handle);
+    
+    // Notify ledger of rejection (ledger expects "failed" status)
+    await notifyDebitLedger(entry, "prepare", ["failed"]);
+    logger.success("Debit prepare rejection sent to ledger", { handle, state: entry.state });
+    return;
+  }
+
+  // Process the action
+  entry = await processAction(entry, "prepare", true);
   logger.stateTransition("processing", "prepared", handle);
 
   // Notify ledger
@@ -62,8 +102,6 @@ export async function prepareDebit(req, res) {
 
 export async function commitDebit(req, res) {
   const handle = req.body?.data?.handle;
-  const amount = req.body?.data?.amount;
-  const symbol = req.body?.data?.symbol?.handle;
 
   // Accept immediately
   res.sendStatus(202);
@@ -74,6 +112,10 @@ export async function commitDebit(req, res) {
     logger.error(`Entry not found for commit`, { handle });
     return;
   }
+
+  // Get amount and symbol from entry (stored during prepare)
+  const amount = entry.amount || req.body?.data?.amount;
+  const symbol = entry.symbol || req.body?.data?.symbol?.handle;
 
   // Process action
   entry.actions["commit"] = {
@@ -86,8 +128,18 @@ export async function commitDebit(req, res) {
   await updateEntry(entry);
   logger.stateTransition(entry.state, "processing", handle);
 
-  // Always succeed
-  entry = await processAction(entry, "commit");
+  // Ask user to confirm commit (just press Enter)
+  const promptMessage = `DEBIT COMMIT - Press Enter to confirm commit\n` +
+    `  Handle: ${handle}\n` +
+    `  Amount: ${amount || 'N/A'} ${symbol || ''}\n` +
+    `\nPress Enter to commit...`;
+  
+  logger.prompt(promptMessage, "question");
+  
+  await waitForInput(promptMessage, "");
+
+  // Process the action
+  entry = await processAction(entry, "commit", true);
   logger.stateTransition("processing", "committed", handle);
 
   // Notify ledger
@@ -97,8 +149,6 @@ export async function commitDebit(req, res) {
 
 export async function abortDebit(req, res) {
   const handle = req.body?.data?.handle;
-  const amount = req.body?.data?.amount;
-  const symbol = req.body?.data?.symbol?.handle;
 
   // Accept immediately
   res.sendStatus(202);
@@ -109,6 +159,10 @@ export async function abortDebit(req, res) {
     logger.error(`Entry not found for abort`, { handle });
     return;
   }
+
+  // Get amount and symbol from entry (stored during prepare)
+  const amount = entry.amount || req.body?.data?.amount;
+  const symbol = entry.symbol || req.body?.data?.symbol?.handle;
 
   // Process action
   entry.actions["abort"] = {
@@ -121,8 +175,30 @@ export async function abortDebit(req, res) {
   await updateEntry(entry);
   logger.stateTransition(entry.state, "processing", handle);
 
-  // Always succeed
-  entry = await processAction(entry, "abort");
+  // Ask user for confirmation
+  const promptMessage = `DEBIT ABORT - Accept or Reject?\n` +
+    `  Handle: ${handle}\n` +
+    `  Amount: ${amount || 'N/A'} ${symbol || ''}\n` +
+    `\nAccept this debit abort? (y/n): `;
+  
+  logger.prompt(promptMessage, "question");
+  
+  // Default to true (accept) in non-interactive environments
+  const accepted = await waitForConfirmation(promptMessage, true);
+  
+  if (!accepted) {
+    logger.warn("Debit abort rejected by user", { handle });
+    entry = await processAction(entry, "abort", false);
+    logger.stateTransition("processing", "failed", handle);
+    
+    // Notify ledger of rejection (ledger expects "failed" status)
+    await notifyDebitLedger(entry, "abort", ["failed"]);
+    logger.success("Debit abort rejection sent to ledger", { handle, state: entry.state });
+    return;
+  }
+
+  // Process the action
+  entry = await processAction(entry, "abort", true);
   logger.stateTransition("processing", "aborted", handle);
 
   // Notify ledger
