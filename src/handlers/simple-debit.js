@@ -1,7 +1,7 @@
 import { notifyDebitLedger } from "../ledger.js";
 import { getEntry, createEntry, updateEntry } from "../persistence.js";
 import { logger } from "../utils/logger.js";
-import { waitForConfirmation, waitForInput } from "../utils/terminal-input.js";
+import { waitForInput } from "../utils/terminal-input.js";
 
 // Simple handler that just accepts and responds
 async function processAction(entry, action, accepted = true) {
@@ -67,29 +67,14 @@ export async function prepareDebit(req, res) {
   await updateEntry(entry);
   logger.stateTransition(null, "processing", handle);
 
-  // Ask user for confirmation
-  const promptMessage = `DEBIT PREPARE - Accept or Reject?\n` +
-    `  Handle: ${handle}\n` +
-    `  Amount: ${amount} ${symbol}\n` +
-    `  Source: ${source}\n` +
-    `  Target: ${target}\n` +
-    `\nAccept this debit prepare? (y/n): `;
-  
-  logger.prompt(promptMessage, "question");
-  
-  // Default to true (accept) in non-interactive environments
-  const accepted = await waitForConfirmation(promptMessage, true);
-  
-  if (!accepted) {
-    logger.warn("Debit prepare rejected by user", { handle });
-    entry = await processAction(entry, "prepare", false);
-    logger.stateTransition("processing", "failed", handle);
-    
-    // Notify ledger of rejection (ledger expects "failed" status)
-    await notifyDebitLedger(entry, "prepare", ["failed"]);
-    logger.success("Debit prepare rejection sent to ledger", { handle, state: entry.state });
-    return;
-  }
+  // Auto-accept all debit prepares for batch testing
+  logger.info("Auto-accepting debit prepare", {
+    handle,
+    amount,
+    symbol,
+    source,
+    target,
+  });
 
   // Process the action
   entry = await processAction(entry, "prepare", true);

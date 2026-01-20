@@ -1,7 +1,10 @@
 import { notifyCreditLedger } from "../ledger.js";
 import { getEntry, createEntry, updateEntry } from "../persistence.js";
 import { logger } from "../utils/logger.js";
-import { waitForConfirmation, waitForInput } from "../utils/terminal-input.js";
+import { waitForInput } from "../utils/terminal-input.js";
+
+const AUTO_REJECT_CREDIT_PREPARE_COUNT = 1;
+let creditPrepareCount = 0;
 
 // Simple handler that just accepts and responds
 async function processAction(entry, action, accepted = true) {
@@ -67,21 +70,19 @@ export async function prepareCredit(req, res) {
   await updateEntry(entry);
   logger.stateTransition(null, "processing", handle);
 
-  // Ask user for confirmation
-  const promptMessage = `CREDIT PREPARE - Accept or Reject?\n` +
-    `  Handle: ${handle}\n` +
-    `  Amount: ${amount} ${symbol}\n` +
-    `  Source: ${source}\n` +
-    `  Target: ${target}\n` +
-    `\nAccept this credit prepare? (y/n): `;
-  
-  logger.prompt(promptMessage, "question");
-  
-  // Default to true (accept) in non-interactive environments
-  const accepted = await waitForConfirmation(promptMessage, true);
-  
-  if (!accepted) {
-    logger.warn("Credit prepare rejected by user", { handle });
+  // Auto-reject the first credit prepare, accept the rest
+  creditPrepareCount += 1;
+  const shouldReject = creditPrepareCount <= AUTO_REJECT_CREDIT_PREPARE_COUNT;
+
+  if (shouldReject) {
+    logger.warn("Auto-rejecting credit prepare (batch test)", {
+      handle,
+      count: creditPrepareCount,
+      amount,
+      symbol,
+      source,
+      target,
+    });
     entry = await processAction(entry, "prepare", false);
     logger.stateTransition("processing", "failed", handle);
     
@@ -90,6 +91,15 @@ export async function prepareCredit(req, res) {
     logger.success("Credit prepare rejection sent to ledger", { handle, state: entry.state });
     return;
   }
+
+  logger.info("Auto-accepting credit prepare (batch test)", {
+    handle,
+    count: creditPrepareCount,
+    amount,
+    symbol,
+    source,
+    target,
+  });
 
   // Process the action
   entry = await processAction(entry, "prepare", true);
