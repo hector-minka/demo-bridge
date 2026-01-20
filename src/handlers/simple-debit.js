@@ -175,27 +175,15 @@ export async function abortDebit(req, res) {
   await updateEntry(entry);
   logger.stateTransition(entry.state, "processing", handle);
 
-  // Ask user for confirmation
-  const promptMessage = `DEBIT ABORT - Accept or Reject?\n` +
+  // Ask user to confirm abort (just press Enter)
+  const promptMessage = `DEBIT ABORT - Press Enter to confirm abort\n` +
     `  Handle: ${handle}\n` +
     `  Amount: ${amount || 'N/A'} ${symbol || ''}\n` +
-    `\nAccept this debit abort? (y/n): `;
+    `\nPress Enter to abort...`;
   
   logger.prompt(promptMessage, "question");
   
-  // Default to true (accept) in non-interactive environments
-  const accepted = await waitForConfirmation(promptMessage, true);
-  
-  if (!accepted) {
-    logger.warn("Debit abort rejected by user", { handle });
-    entry = await processAction(entry, "abort", false);
-    logger.stateTransition("processing", "failed", handle);
-    
-    // Notify ledger of rejection (ledger expects "failed" status)
-    await notifyDebitLedger(entry, "abort", ["failed"]);
-    logger.success("Debit abort rejection sent to ledger", { handle, state: entry.state });
-    return;
-  }
+  await waitForInput(promptMessage, "");
 
   // Process the action
   entry = await processAction(entry, "abort", true);

@@ -4,7 +4,7 @@ import { logger } from './utils/logger.js'
 const { LedgerSdk } = ledgerSdk
 
 // const LEDGER = "ledger-bridge-test";
-const LEDGER = 'tfy-stg'
+const LEDGER = 'ph-demo'
 const SERVER = 'https://ldg-stg.one/api/v2'
 
 // Debit signer keys
