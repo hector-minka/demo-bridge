@@ -3,7 +3,7 @@ import { getEntry, createEntry, updateEntry } from "../persistence.js";
 import { logger } from "../utils/logger.js";
 import { waitForInput } from "../utils/terminal-input.js";
 
-const AUTO_REJECT_CREDIT_PREPARE_COUNT = 1;
+const AUTO_REJECT_CREDIT_PREPARE_COUNT = 0;
 let creditPrepareCount = 0;
 
 // Simple handler that just accepts and responds
@@ -70,28 +70,8 @@ export async function prepareCredit(req, res) {
   await updateEntry(entry);
   logger.stateTransition(null, "processing", handle);
 
-  // Auto-reject the first credit prepare, accept the rest
+  // Auto-accept all credit prepares for batch testing
   creditPrepareCount += 1;
-  const shouldReject = creditPrepareCount <= AUTO_REJECT_CREDIT_PREPARE_COUNT;
-
-  if (shouldReject) {
-    logger.warn("Auto-rejecting credit prepare (batch test)", {
-      handle,
-      count: creditPrepareCount,
-      amount,
-      symbol,
-      source,
-      target,
-    });
-    entry = await processAction(entry, "prepare", false);
-    logger.stateTransition("processing", "failed", handle);
-    
-    // Notify ledger of rejection (ledger expects "failed" status)
-    await notifyCreditLedger(entry, "prepare", ["failed"]);
-    logger.success("Credit prepare rejection sent to ledger", { handle, state: entry.state });
-    return;
-  }
-
   logger.info("Auto-accepting credit prepare (batch test)", {
     handle,
     count: creditPrepareCount,
